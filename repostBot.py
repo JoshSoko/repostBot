@@ -193,10 +193,34 @@ def main():
                 if commands[1] == 'setrole':
                     ROLE_ID = message.role_mentions[0].id
                     cursor.execute("UPDATE settings SET roleID=? WHERE guildID=?", (ROLE_ID, message.guild.id,))
-                    await message.channel.send("Updated reposter role.")
+                    await message.channel.send(f"Updated reposter role to <@&{ROLE_ID}>.")
                     conn.commit()
                     return
+                elif commands[1] == 'add':
+                    if commands[2] == 'wordban':
+                        return
+                    if commands[2] == 'ignoreword':
+                        return
+                    if commands[2] == 'ignorechannel':
+                        return
+                    return
+                elif commands[1] == 'delete':
+                    if commands[2] == 'wordban':
+                        return
+                    if commands[2] == 'ignoreword':
+                        return
+                    if commands[2] == 'ignorechannel':
+                        return
+                    return
+                elif commands[1] == 'timeout':
+                    if commands[2].isnumeric():
+                        TIMEOUT_TIME = int(commands[2])
+                        cursor.execute("UPDATE settings SET timeout=? WHERE guildID=?", (TIMEOUT_TIME, message.guild.id,))
+                        await message.channel.send(f"Timeout time for banned words set to {TIMEOUT_TIME} minutes.")
+                        conn.commit()
+                    return
             except IndexError:
+                await message.channel.send("Invalid command.")
                 return
 
         # Only acknowledge whitelisted channel posts
