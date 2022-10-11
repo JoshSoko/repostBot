@@ -1,5 +1,6 @@
 from ctypes.wintypes import WORD
 from datetime import datetime
+from discord.ext import commands
 import discord
 import os
 import sqlite3
@@ -7,12 +8,9 @@ from dotenv import load_dotenv
 from datetime import timedelta
 
 # Function to clear old data from chat logs
-
-
 def clear(cursor, LENGTH):
     cursor.execute(
         "DELETE FROM chat WHERE (date < DATETIME('now', ?))", (LENGTH,))
-
 
 # Function to write message into database
 def writechat(conn, cursor, message):
@@ -20,7 +18,6 @@ def writechat(conn, cursor, message):
     cursor.execute("INSERT INTO chat (date, messageDesc, memberID) VALUES (DATETIME('NOW', 'LOCALTIME'), ?, ?)",
                    (message.content, message.author.id,))
     conn.commit()
-
 
 # Function to write count of timeouts in database
 def writeban(conn, cursor, message):
@@ -35,7 +32,6 @@ def writeban(conn, cursor, message):
 
     # We'll return the count for the announcement
     return str(count)
-
 
 # Function to handle repost logic
 async def repost(conn, cursor, message, ROLE_ID):
@@ -85,11 +81,7 @@ async def repost(conn, cursor, message, ROLE_ID):
             except discord.errors.Forbidden:
                 await message.channel.send("Make sure my role is higher than the repost role! Otherwise, I can't assign or remove any roles!")
 
-    
-
 # Function to time out person for saying banned word
-
-
 async def wordban(conn, cursor, message, TIMEOUT_TIME):
     # How long to time out the offender
     time = timedelta(minutes=TIMEOUT_TIME)
@@ -107,6 +99,45 @@ async def wordban(conn, cursor, message, TIMEOUT_TIME):
     # And inform the channel of the offense
     await message.channel.send(message.author.mention + " has been timed out for saying a banned word.\nThey have said a banned word " + count + " times.")
 
+# Functions to add new banned words, whitelisted words, and whitelisted channels
+async def addwordban(ctx, cursor, conn):
+    bannedWords = cursor.execute("SELECT wordban FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
+    newWord = ctx.message.content.split()[3]
+    bannedWords += (" " + newWord)
+    await ctx.message.channel.send(f"Added {newWord} to banned word list. {bannedWords}.")
+    cursor.execute("UPDATE settings SET wordban=? WHERE guildID=?", (bannedWords, ctx.message.guild.id))
+    conn.commit()
+
+async def addwordignore(ctx, cursor, conn):
+    print("add word ignore")
+    return
+
+async def addchannelignore(ctx, cursor, conn):
+    print("add channel ignore")
+    return
+
+# Functions to delete banned words, whitelisted words, and whitelisted channels
+
+async def delwordban(ctx, cursor, conn):
+    bannedWords = cursor.execute("SELECT wordban FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
+    bannedWords = bannedWords.split()
+    removeWord = ctx.message.content.split()[3]
+    if removeWord in bannedWords:
+        bannedWords.remove(removeWord)
+        bannedWords = " ".join(bannedWords)
+        await ctx.message.channel.send(f"Removed {removeWord} from banned word list. {bannedWords}.")
+        cursor.execute("UPDATE settings SET wordban=? WHERE guildID=?", (bannedWords, ctx.message.guild.id))
+        conn.commit()
+        return
+    await ctx.message.channel.send("Word not found in banned word list.")
+
+async def delwordignore(ctx, cursor, conn):
+    print("delete word ignore")
+    return
+
+async def delchannelignore(ctx, cursor, conn):
+    print("delete channel ignore")
+    return
 
 def main():
 
@@ -122,7 +153,7 @@ def main():
     TOKEN = os.getenv('TOKEN')
 
     # Set bot as Discord client
-    client = discord.Client(intents=intents)
+    bot = commands.Bot(command_prefix='$repost ', intents=intents)
 
     # Load up database; create database and tables if they doesn't exist.
     try:
@@ -136,11 +167,11 @@ def main():
 
     # On launch, print to console
 
-    @client.event
+    @bot.event
     async def on_ready():
-        print('We have logged in as {0.user}'.format(client))
+        print('We have logged in as {0.user}'.format(bot))
 
-    @client.event
+    @bot.event
     async def on_guild_join(joined):
 
         # Create new settings row for guild in main database
@@ -168,13 +199,66 @@ def main():
 
             guildConn.commit()
 
+    @bot.command()
+    async def setrole(ctx):
+        try:
+            ROLE_ID = ctx.message.role_mentions[0].id
+            cursor.execute("UPDATE settings SET roleID=? WHERE guildID=?", (ROLE_ID, ctx.message.guild.id,))
+            await ctx.message.channel.send(f"Updated reposter role to <@&{ROLE_ID}>.")
+            conn.commit()
+        except IndexError:
+            return
+
+    @bot.command()
+    async def timeout(ctx):
+        try:
+            timelimit = ctx.message.content.split()[2]
+            if timelimit.isnumeric():
+                TIMEOUT_TIME = int(timelimit)
+                cursor.execute("UPDATE settings SET timeout=? WHERE guildID=?", (TIMEOUT_TIME, ctx.message.guild.id,))
+                await ctx.message.channel.send(f"Timeout time for banned words set to {TIMEOUT_TIME} minutes.")
+                conn.commit()
+        except IndexError:
+            return
+
+    @bot.command()
+    async def add(ctx):
+        try:
+            funcCall = ctx.message.content.split()[2]
+            if funcCall == 'banned':
+                await addwordban(ctx, cursor, conn)
+            if funcCall == 'word':
+                await addwordignore(ctx, cursor, conn)
+            if funcCall == 'channel':
+                await addchannelignore(ctx, cursor, conn)
+        except IndexError:
+            return
+
+    @bot.command()
+    async def delete(ctx):
+        try:
+            funcCall = ctx.message.content.split()[2]
+            if funcCall == 'banned':
+                await delwordban(ctx, cursor, conn)
+            if funcCall == 'word':
+                await delwordignore(ctx, cursor, conn)
+            if funcCall == 'channel':
+                await delchannelignore(ctx, cursor, conn)
+        except IndexError:
+            return
+
     # On message,
-    @client.event
+    @bot.event
     async def on_message(message):
 
+        # Check for commands
+        await bot.process_commands(message)
+
         # Ignore if this bot sent it
-        if message.author == client.user:
+        if message.author == bot.user:
             return
+
+
 
         # Load options into variables
         settings = (cursor.execute(
@@ -187,70 +271,35 @@ def main():
         IGNORE_CHANNELS = str(settings[5])
         EXEMPT_WORDS = settings[6]
 
-        if (message.content.startswith('$repost ')):
-            commands = message.content.split()
-            try:
-                if commands[1] == 'setrole':
-                    ROLE_ID = message.role_mentions[0].id
-                    cursor.execute("UPDATE settings SET roleID=? WHERE guildID=?", (ROLE_ID, message.guild.id,))
-                    await message.channel.send(f"Updated reposter role to <@&{ROLE_ID}>.")
-                    conn.commit()
-                    return
-                elif commands[1] == 'add':
-                    if commands[2] == 'wordban':
-                        return
-                    if commands[2] == 'ignoreword':
-                        return
-                    if commands[2] == 'ignorechannel':
-                        return
-                    return
-                elif commands[1] == 'delete':
-                    if commands[2] == 'wordban':
-                        return
-                    if commands[2] == 'ignoreword':
-                        return
-                    if commands[2] == 'ignorechannel':
-                        return
-                    return
-                elif commands[1] == 'timeout':
-                    if commands[2].isnumeric():
-                        TIMEOUT_TIME = int(commands[2])
-                        cursor.execute("UPDATE settings SET timeout=? WHERE guildID=?", (TIMEOUT_TIME, message.guild.id,))
-                        await message.channel.send(f"Timeout time for banned words set to {TIMEOUT_TIME} minutes.")
-                        conn.commit()
-                    return
-            except IndexError:
-                await message.channel.send("Invalid command.")
-                return
 
-        # Only acknowledge whitelisted channel posts
-        if message.channel.id in IGNORE_CHANNELS.split():
-            return
+        # # Only acknowledge whitelisted channel posts
+        # if message.channel.id in IGNORE_CHANNELS.split():
+        #     return
 
-        # Ignore exempt phrases
-        for i in EXEMPT_WORDS.split():
-            if message.content == i:
-                return
+        # # Ignore exempt phrases
+        # for i in EXEMPT_WORDS.split():
+        #     if message.content == i:
+        #         return
 
-        # Connect to server's database
-        guildConn = sqlite3.connect(
-            f'file:{message.guild.id}.sqlite?mode=rw', uri=True)
-        guildCursor = guildConn.cursor()
+        # # Connect to server's database
+        # guildConn = sqlite3.connect(
+        #     f'file:{message.guild.id}.sqlite?mode=rw', uri=True)
+        # guildCursor = guildConn.cursor()
 
-        # Whenever a message is sent, clear anything that's too old in the chat database.
-        clear(guildCursor, DELETE_TIME)
+        # # Whenever a message is sent, clear anything that's too old in the chat database.
+        # clear(guildCursor, DELETE_TIME)
 
-        # Check for banned word
-        for i in BANNED_WORDS.split():
-            if i in message.content:
-                await wordban(guildConn, guildCursor, message, TIMEOUT_TIME)
+        # # Check for banned word
+        # for i in BANNED_WORDS.split():
+        #     if i in message.content:
+        #         await wordban(guildConn, guildCursor, message, TIMEOUT_TIME)
 
-        # Check for reposts
-        if message.content != "":
-            await repost(guildConn, guildCursor, message, ROLE_ID)
+        # # Check for reposts
+        # if message.content != "":
+        #     await repost(guildConn, guildCursor, message, ROLE_ID)
 
     # Run bot
-    client.run(TOKEN)
+    bot.run(TOKEN)
 
 
 main()
