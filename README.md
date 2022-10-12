@@ -16,7 +16,11 @@ A joke bot for Discord designed to punish people by assigning a role to users wh
 3. Set the role to be assigned with '$repost setrole' command. (Ex: $repost setrole @testrole)
 
 ### Optional Use
-- Change the timeout time, in minutes, for banned words with the '$repost timeout' command. (Ex: $repost timeout 4)
+- Change the timeout time, in minutes, for banned words with the '$repost timeout' command.
+  - Ex: $repost timeout 4
+- Add or delete words to be banned (default: 'idiot')
+  - Ex: $repost add banned clown
+  - Ex: $repost delete banned clown
 
 ### Future Features
 - Currently transitioning from settings kept on a separate file to settings kept on database. Because of this, the following settings don't work:
