@@ -24,7 +24,6 @@ A joke bot for Discord designed to punish people by assigning a role to users wh
 
 ### Future Features
 - Currently transitioning from settings kept on a separate file to settings kept on database. Because of this, the following settings don't work:
-  - Changing the banned words
   - Setting exempt words
   - Setting channels for the bot to ignore
 
