@@ -7,12 +7,47 @@ import sqlite3
 from dotenv import load_dotenv
 from datetime import timedelta
 
+# Prefix for accessing the bot in Discord client
 BOT_PREFIX = "$repost "
+
+# I'm so sorry I literally can't think of a better way to do this.
+# Function sets up stuff for each Discord server, or "guild"
+def serverSetup(ctx, conn, cursor):
+
+    # Create new settings row for guild in main database
+    cursor.execute(
+        "INSERT INTO settings (guildID) VALUES (?)", (ctx.id,))
+    conn.commit()
+
+    # Connect to server's database if it exists. Otherwise, create one.
+    try:
+        guildConn = sqlite3.connect(
+            f'file:{ctx.id}.sqlite?mode=rw', uri=True)
+        guildCursor = guildConn.cursor()
+    except sqlite3.OperationalError:
+        guildConn = sqlite3.connect(f'{ctx.id}.sqlite')
+        guildCursor = guildConn.cursor()
+
+        guildCursor.execute(
+            "CREATE TABLE members (memberID INTEGER PRIMARY KEY, count INTEGER DEFAULT '0')")
+
+        guildCursor.execute(
+            "CREATE TABLE chat (messageID INTEGER PRIMARY KEY, date DATE, messageDesc TEXT, memberID INTEGER, FOREIGN KEY(memberID) REFERENCES members(memberID))")
+
+        for member in ctx.members:
+            guildCursor.execute(
+                "INSERT INTO members (memberID) VALUES (?)", (member.id,))
+
+        guildConn.commit()
+
+    return guildConn, guildCursor
+
 
 # Function to clear old data from chat logs
 def clear(cursor, LENGTH):
     cursor.execute(
         "DELETE FROM chat WHERE (date < DATETIME('now', ?))", (LENGTH,))
+
 
 # Function to write message into database
 def writechat(conn, cursor, message):
@@ -20,6 +55,7 @@ def writechat(conn, cursor, message):
     cursor.execute("INSERT INTO chat (date, messageDesc, memberID) VALUES (DATETIME('NOW', 'LOCALTIME'), ?, ?)",
                    (message.content, message.author.id,))
     conn.commit()
+
 
 # Function to write count of timeouts in database
 def writeban(conn, cursor, message):
@@ -35,13 +71,15 @@ def writeban(conn, cursor, message):
     # We'll return the count for the announcement
     return str(count)
 
+
 # Function to handle repost logic
 async def repost(conn, cursor, message, ROLE_ID):
     # Assign content to variable, and then change it for images
     mes = message.content
 
     # Returns 0 if not a repost, 1 if a repost
-    real = cursor.execute("SELECT EXISTS(SELECT messageDesc FROM chat WHERE messageDesc = ?)", (mes,)).fetchone()
+    real = cursor.execute(
+        "SELECT EXISTS(SELECT messageDesc FROM chat WHERE messageDesc = ?)", (mes,)).fetchone()
 
     # If it's a repost, announce it to the channel
     # remove the role from anyone who has it
@@ -83,6 +121,7 @@ async def repost(conn, cursor, message, ROLE_ID):
             except discord.errors.Forbidden:
                 await message.channel.send("Make sure my role is higher than the repost role! Otherwise, I can't assign or remove any roles!")
 
+
 # Function to time out person for saying banned word
 async def wordban(conn, cursor, message, TIMEOUT_TIME):
     # How long to time out the offender
@@ -101,27 +140,33 @@ async def wordban(conn, cursor, message, TIMEOUT_TIME):
     # And inform the channel of the offense
     await message.channel.send(message.author.mention + " has been timed out for saying a banned word.\nThey have said a banned word " + count + " times.")
 
+
 # Functions to add new banned words, whitelisted words, and whitelisted channels
 async def addwordban(ctx, cursor, conn):
     # Pull banned word list and add to it, then put it back in the database
-    bannedWords = cursor.execute("SELECT wordban FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
+    bannedWords = cursor.execute(
+        "SELECT wordban FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
     newWord = ctx.message.content.split()[3]
     bannedWords += (" " + newWord)
     await ctx.message.channel.send(f"Added {newWord} to banned word list. {bannedWords}.")
-    cursor.execute("UPDATE settings SET wordban=? WHERE guildID=?", (bannedWords, ctx.message.guild.id))
+    cursor.execute("UPDATE settings SET wordban=? WHERE guildID=?",
+                   (bannedWords, ctx.message.guild.id))
     conn.commit()
+
 
 async def addwordignore(ctx, cursor, conn):
     return
 
+
 async def addchannelignore(ctx, cursor, conn):
     return
 
-# Functions to delete banned words, whitelisted words, and whitelisted channels
 
+# Functions to delete banned words, whitelisted words, and whitelisted channels
 async def delwordban(ctx, cursor, conn):
     # Pull up banned word list and split it
-    bannedWords = cursor.execute("SELECT wordban FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
+    bannedWords = cursor.execute(
+        "SELECT wordban FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
     bannedWords = bannedWords.split()
     removeWord = ctx.message.content.split()[3]
 
@@ -130,18 +175,22 @@ async def delwordban(ctx, cursor, conn):
         bannedWords.remove(removeWord)
         bannedWords = " ".join(bannedWords)
         await ctx.message.channel.send(f"Removed {removeWord} from banned word list. {bannedWords}.")
-        cursor.execute("UPDATE settings SET wordban=? WHERE guildID=?", (bannedWords, ctx.message.guild.id))
+        cursor.execute("UPDATE settings SET wordban=? WHERE guildID=?",
+                       (bannedWords, ctx.message.guild.id))
         conn.commit()
         return
 
     # If the word isn't in the list, tell the user
     await ctx.message.channel.send("Word not found in banned word list.")
 
+
 async def delwordignore(ctx, cursor, conn):
     return
 
+
 async def delchannelignore(ctx, cursor, conn):
     return
+
 
 def main():
 
@@ -179,36 +228,15 @@ def main():
     async def on_guild_join(joined):
 
         # Create new settings row for guild in main database
-        cursor.execute(
-            "INSERT INTO settings (guildID) VALUES (?)", (joined.id,))
-        conn.commit()
-
-        try:
-            guildConn = sqlite3.connect(
-                f'file:{joined.id}.sqlite?mode=rw', uri=True)
-            guildCursor = guildConn.cursor()
-        except sqlite3.OperationalError:
-            guildConn = sqlite3.connect(f'{joined.id}.sqlite')
-            guildCursor = guildConn.cursor()
-
-            guildCursor.execute(
-                "CREATE TABLE members (memberID INTEGER PRIMARY KEY, count INTEGER DEFAULT '0')")
-
-            guildCursor.execute(
-                "CREATE TABLE chat (messageID INTEGER PRIMARY KEY, date DATE, messageDesc TEXT, memberID INTEGER, FOREIGN KEY(memberID) REFERENCES members(memberID))")
-
-            for member in joined.members:
-                guildCursor.execute(
-                    "INSERT INTO members (memberID) VALUES (?)", (member.id,))
-
-            guildConn.commit()
+        serverSetup(joined, conn, cursor)
 
     # Command to set the reposter role
     @bot.command()
     async def setrole(ctx):
         try:
             ROLE_ID = ctx.message.role_mentions[0].id
-            cursor.execute("UPDATE settings SET roleID=? WHERE guildID=?", (ROLE_ID, ctx.message.guild.id,))
+            cursor.execute("UPDATE settings SET roleID=? WHERE guildID=?",
+                           (ROLE_ID, ctx.message.guild.id,))
             await ctx.message.channel.send(f"Updated reposter role to <@&{ROLE_ID}>.")
             conn.commit()
         except IndexError:
@@ -221,7 +249,8 @@ def main():
             timelimit = ctx.message.content.split()[2]
             if timelimit.isnumeric():
                 TIMEOUT_TIME = int(timelimit)
-                cursor.execute("UPDATE settings SET timeout=? WHERE guildID=?", (TIMEOUT_TIME, ctx.message.guild.id,))
+                cursor.execute("UPDATE settings SET timeout=? WHERE guildID=?",
+                               (TIMEOUT_TIME, ctx.message.guild.id,))
                 await ctx.message.channel.send(f"Timeout time for banned words set to {TIMEOUT_TIME} minutes.")
                 conn.commit()
         except IndexError:
@@ -266,14 +295,22 @@ def main():
 
         # Check for commands
         await bot.process_commands(message)
-        
+
         # Ignore if this bot sent it
         if message.author == bot.user:
             return
 
         # Load options into variables
-        settings = (cursor.execute(
-            "SELECT * FROM settings WHERE guildID = ?", (message.guild.id,))).fetchall()[0]
+        serverExist = cursor.execute(
+            "SELECT EXISTS(SELECT guildID FROM settings WHERE guildID = ?)", (message.guild.id,)).fetchone()
+
+        if serverExist[0] == 1:
+            settings = (cursor.execute(
+                "SELECT * FROM settings WHERE guildID = ?", (message.guild.id,))).fetchall()[0]
+        else:
+            guildConn, guildCursor = serverSetup(message.guild, conn, cursor)
+            settings = (cursor.execute(
+                "SELECT * FROM settings WHERE guildID = ?", (message.guild.id,))).fetchall()[0]
 
         ROLE_ID = settings[1]
         DELETE_TIME = settings[2]

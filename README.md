@@ -9,10 +9,9 @@ A joke bot for Discord designed to punish people by assigning a role to users wh
 - Certain words can be banned, and anyone who uses them will be timed out for a certain amount of time.
 
 ## Use
-
 0. Set up a new bot on Discord's development site. Put the API token into a .env file like so: TOKEN="YOURTOKENHERE"
-1. Put the bot online by running the Python script. (The bot will only create a new database for a server upon joining)
-2. Invite the bot to your server.
+1. Put the bot online by running the Python script.
+2. Invite the bot to your server. (NOTE: The bot can handle steps 1 and 2 interchangeably!)
 3. Set the role to be assigned with '$repost setrole' command. (Ex: $repost setrole @testrole)
 
 ### Optional Use
@@ -30,3 +29,4 @@ A joke bot for Discord designed to punish people by assigning a role to users wh
 
 ## Known Bugs
 - Gifs, mentions, and emoji-only posts trigger the bot
+- No logic for a user joining after the database is created
