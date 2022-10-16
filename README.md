@@ -29,4 +29,3 @@ A joke bot for Discord designed to punish people by assigning a role to users wh
 
 ## Known Bugs
 - Gifs, mentions, and emoji-only posts trigger the bot
-- No logic for a user joining after the database is created
