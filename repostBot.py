@@ -137,6 +137,7 @@ async def wordban(conn, cursor, message, TIMEOUT_TIME):
     # Call a function to write to the database
     count = writeban(conn, cursor, message)
 
+
     # And inform the channel of the offense
     await message.channel.send(message.author.mention + " has been timed out for saying a banned word.\nThey have said a banned word " + count + " times.")
 
@@ -300,18 +301,32 @@ def main():
         if message.author == bot.user:
             return
 
-        # Load options into variables
+        # Check if server has settings and a database
         serverExist = cursor.execute(
             "SELECT EXISTS(SELECT guildID FROM settings WHERE guildID = ?)", (message.guild.id,)).fetchone()
 
+        # If 1, load them up. If 0, make them.
         if serverExist[0] == 1:
             settings = (cursor.execute(
                 "SELECT * FROM settings WHERE guildID = ?", (message.guild.id,))).fetchall()[0]
+            guildConn = sqlite3.connect(
+                f'file:{message.guild.id}.sqlite?mode=rw', uri=True)
+            guildCursor = guildConn.cursor()
         else:
             guildConn, guildCursor = serverSetup(message.guild, conn, cursor)
             settings = (cursor.execute(
                 "SELECT * FROM settings WHERE guildID = ?", (message.guild.id,))).fetchall()[0]
 
+        # Check if poster exists in database
+        memberExist = guildCursor.execute(
+            "SELECT EXISTS(SELECT memberID FROM members WHERE memberID = ?)", (message.author.id,)).fetchone()
+
+        # Add them if they don't
+        if memberExist[0] == 0:
+            guildCursor.execute(
+                "INSERT INTO members (memberID) VALUES (?)", (message.author.id,))
+
+        # Load options into variables
         ROLE_ID = settings[1]
         DELETE_TIME = settings[2]
         BANNED_WORDS = settings[3]
@@ -328,10 +343,6 @@ def main():
             if message.content == i:
                 return
 
-        # Connect to server's database
-        guildConn = sqlite3.connect(
-            f'file:{message.guild.id}.sqlite?mode=rw', uri=True)
-        guildCursor = guildConn.cursor()
 
         # Whenever a message is sent, clear anything that's too old in the chat database.
         clear(guildCursor, DELETE_TIME)
