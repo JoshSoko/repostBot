@@ -427,6 +427,18 @@ def main():
         except IndexError:
             raise commands.CommandNotFound
 
+    @bot.command()
+    async def length(ctx):
+        length = int(ctx.message.content.split()[2])
+        if length > 0 and length < 90:
+            await ctx.message.channel.send(f"Time for reposts set to {length} days.")
+            length = "-" + str(length) + " days"
+            cursor.execute("UPDATE settings SET length=? WHERE guildID=?",
+                               (length, ctx.message.guild.id,))
+            conn.commit()
+            return
+        await ctx.message.channel.send(f"Please use a number between 0 and 90.")
+
 
     @bot.command()
     async def use(ctx):
@@ -439,7 +451,8 @@ def main():
             - $repost remove ban BANNEDWORD: Remove a word from the word ban list. \n\
             - $repost remove word EXEMPTWORD: Remove a word from the exemption list for reposts. \n\
             - $repost remove channel #CHANNEL: Remove a channel from the ignore list for reposts. \n\
-            - $repost registry ban/word/channel: List the banned words/exempt words/ignored channels.```")
+            - $repost registry ban/word/channel: List the banned words/exempt words/ignored channels. \n\
+            - $repost length #: Set time for repost storage, between 0 and 90 days.```")
 
     @bot.event
     async def on_command_error(ctx, error):
