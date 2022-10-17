@@ -156,7 +156,15 @@ async def addwordban(ctx, cursor, conn):
 
 
 async def addwordignore(ctx, cursor, conn):
-    return
+    # Pull ignored word list and add to it, then put it back in the database
+    ignoreWords = cursor.execute(
+        "SELECT ignoreWords FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
+    newWord = ctx.message.content.split()[3]
+    ignoreWords += (" " + newWord)
+    await ctx.message.channel.send(f"Added {newWord} to ignored word list. {ignoreWords}.")
+    cursor.execute("UPDATE settings SET ignoreWords=? WHERE guildID=?",
+                   (ignoreWords, ctx.message.guild.id))
+    conn.commit()
 
 
 async def addchannelignore(ctx, cursor, conn):
@@ -186,7 +194,24 @@ async def delwordban(ctx, cursor, conn):
 
 
 async def delwordignore(ctx, cursor, conn):
-    return
+    # Pull up ignored word list and split it
+    ignoreWords = cursor.execute(
+        "SELECT ignoreWords FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
+    ignoreWords = ignoreWords.split()
+    removeWord = ctx.message.content.split()[3]
+
+    # If the word is in the list, remove it from the list and put the list back into the database
+    if removeWord in ignoreWords:
+        ignoreWords.remove(removeWord)
+        ignoreWords = " ".join(ignoreWords)
+        await ctx.message.channel.send(f"Removed {removeWord} from ignored word list. {ignoreWords}.")
+        cursor.execute("UPDATE settings SET ignoreWords=? WHERE guildID=?",
+                       (ignoreWords, ctx.message.guild.id))
+        conn.commit()
+        return
+
+    # If the word isn't in the list, tell the user
+    await ctx.message.channel.send("Word not found in banned word list.")
 
 
 async def delchannelignore(ctx, cursor, conn):

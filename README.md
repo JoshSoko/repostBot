@@ -20,10 +20,12 @@ A joke bot for Discord designed to punish people by assigning a role to users wh
 - Add or delete words to be banned (default: 'idiot')
   - Ex: $repost add banned clown
   - Ex: $repost delete banned clown
+- Add or delete words to ignore (default: 'hey hello hi yo ^ yeah ya yea lol no nah nope')
+  - Ex: $repost add word whatever
+  - Ex: $repost delete word whatever
 
 ### Future Features
 - Currently transitioning from settings kept on a separate file to settings kept on database. Because of this, the following settings don't work:
-  - Setting exempt words
   - Setting channels for the bot to ignore
 
 
