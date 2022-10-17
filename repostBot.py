@@ -1,6 +1,7 @@
 from ctypes.wintypes import WORD
 from datetime import datetime
 from discord.ext import commands
+import emoji
 import discord
 import os
 import sqlite3
@@ -499,6 +500,17 @@ def main():
             if message.content == i:
                 return
 
+        # Weird logic to try to ignore mentions. Could probably be taken advantage of to repost, I suppose.
+        if message.content.startswith("<") and message.content.endswith(">") and len(message.content.split()) == 1:
+            return
+
+        # Some logic to ignore emoji-only posts.
+        # Custom emoji are formatted the same way as mentions, so there's no need for logic for them.
+        messageList = emoji.demojize(message.content).split()
+        res = all(each.startswith(":") and each.endswith(":") for each in messageList)
+        if res == True:
+
+            return
 
         # Whenever a message is sent, clear anything that's too old in the chat database.
         clear(guildCursor, DELETE_TIME)
