@@ -297,6 +297,30 @@ async def delchannelignore(ctx, cursor, conn):
         conn.commit()
 
 
+async def listBan(ctx, cursor, conn):
+    bannedWords = cursor.execute(
+        "SELECT wordban FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
+
+    bannedWords = bannedWords.split()
+    listWords = "".join([wordLayout(x) for x in bannedWords])
+    await ctx.message.channel.send(f">>> Banned words: ```{listWords}```")
+
+async def listWord(ctx, cursor, conn):
+    ignoreWords = cursor.execute(
+        "SELECT ignoreWords FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
+
+    ignoreWords = ignoreWords.split()
+    listWords = "".join([wordLayout(x) for x in ignoreWords])
+    await ctx.message.channel.send(f">>> Ignoring words: ```{listWords}```")
+
+async def listChannel(ctx, cursor, conn):
+    ignoreChannels = cursor.execute(
+        "SELECT ignoreChannels FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
+
+    ignoreChannels = ignoreChannels.split()
+    listChannels = "".join([channelLayout(x) for x in ignoreChannels])
+    await ctx.message.channel.send(f">>> Ignoring channels:\n {listChannels}")
+
 def main():
 
     # Tell Discord the bot intents
@@ -366,14 +390,14 @@ def main():
     async def add(ctx):
         try:
             funcCall = ctx.message.content.split()[2]
-            if funcCall == 'banned':
+            if funcCall == 'ban':
                 await addwordban(ctx, cursor, conn)
             if funcCall == 'word':
                 await addwordignore(ctx, cursor, conn)
             if funcCall == 'channel':
                 await addchannelignore(ctx, cursor, conn)
         except IndexError:
-            return
+            raise commands.CommandNotFound
 
     # Command $repost delete X will call the appropriate function
     @bot.command()
@@ -387,12 +411,39 @@ def main():
             if funcCall == 'channel':
                 await delchannelignore(ctx, cursor, conn)
         except IndexError:
-            return
+            raise commands.CommandNotFound
+
+    @bot.command()
+    async def registry(ctx):
+        try:
+            funcCall = ctx.message.content.split()[2]
+            if funcCall == 'ban':
+                await listBan(ctx, cursor, conn)
+            if funcCall == 'word':
+                await listWord(ctx, cursor, conn)
+            if funcCall == 'channel':
+                await listChannel(ctx, cursor, conn)
+        except IndexError:
+            raise commands.CommandNotFound
+
+
+    @bot.command()
+    async def use(ctx):
+        await ctx.channel.send("```\n\
+            - $repost setrole @REPOSTROLE: Set a role to be applied to the most recent reposter.\n\
+            - $repost timeout #: Changes the timeout punishment time for saying a banned word. \n\
+            - $repost add ban BANNEDWORD: Add a word to the word ban list. \n\
+            - $repost add word EXEMPTWORD: Add a word to the exemption list for reposts. \n\
+            - $repost add channel #CHANNEL: Add a channel to the ignore list for reposts. \n\
+            - $repost remove ban BANNEDWORD: Remove a word from the word ban list. \n\
+            - $repost remove word EXEMPTWORD: Remove a word from the exemption list for reposts. \n\
+            - $repost remove channel #CHANNEL: Remove a channel from the ignore list for reposts. \n\
+            - $repost registry ban/word/channel: List the banned words/exempt words/ignored channels.```")
 
     @bot.event
     async def on_command_error(ctx, error):
         if isinstance(error, commands.CommandNotFound):
-            await ctx.channel.send("Command not found.")
+            await ctx.channel.send("Command not found. Try typing '$repost use' for help using the bot.")
 
     # On message,
     @bot.event
@@ -428,7 +479,8 @@ def main():
                 "INSERT INTO members (memberID) VALUES (?)", (message.author.id,))
 
         # Check for commands
-        await bot.process_commands(message)
+        if message.author.guild_permissions.administrator == True:
+            await bot.process_commands(message)
 
         # Load options into variables
         ROLE_ID = settings[1]

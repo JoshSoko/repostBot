@@ -19,20 +19,19 @@ A joke bot for Discord designed to punish people by assigning a role to users wh
 ### Optional Use
 - Change the timeout time, in minutes, for banned words with the '$repost timeout' command.
   - Ex: $repost timeout 4
-- Add or remove words to be banned (default: 'idiot')
+- Add or remove words to be banned (default: 'idiot').
   - Ex: $repost add ban clown
   - Ex: $repost remove ban clown
-- Add or remove words to ignore (default: 'hey hello hi yo ^ yeah ya yea lol no nah nope')
+- Add or remove words to ignore (default: 'hey hello hi yo ^ yeah ya yea lol no nah nope').
   - Ex: $repost add word whatever
   - Ex: $repost remove word whatever
-- Add or remove channels for the bot to overlook (None by default. Bot commands will still function in channels.)
+- Add or remove channels for the bot to overlook (None by default. Bot commands will still function in channels.).
   - Ex: $repost add channel #test
   - Ex: $repost remove channel #test
-
-### Future Features
-- Need to find a way to only allow access for certain people
-- A "help" command
-- A way to check current lists without having to add or remove things
+- Retrieve a list of banned words, exempt words, or ignored channels.
+  - Ex: $repost registry ban/word/channel
+- Pull up a list of these commands.
+  - Ex: $repost use
 
 
 ## Known Bugs
