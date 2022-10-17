@@ -141,6 +141,11 @@ async def wordban(conn, cursor, message, TIMEOUT_TIME):
     # And inform the channel of the offense
     await message.channel.send(message.author.mention + " has been timed out for saying a banned word.\nThey have said a banned word " + count + " times.")
 
+def channelLayout(x):
+    return " <#" + x + ">\n"
+
+def wordLayout(x):
+    return " " + x + "\n"
 
 # Functions to add new banned words, whitelisted words, and whitelisted channels
 async def addwordban(ctx, cursor, conn):
@@ -148,10 +153,21 @@ async def addwordban(ctx, cursor, conn):
     bannedWords = cursor.execute(
         "SELECT wordban FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
     newWord = ctx.message.content.split()[3]
+
+    if newWord in bannedWords:
+        await ctx.message.channel.send("Word already in ban list.")
+        return
+
     bannedWords += (" " + newWord)
-    await ctx.message.channel.send(f"Added {newWord} to banned word list. {bannedWords}.")
+
     cursor.execute("UPDATE settings SET wordban=? WHERE guildID=?",
                    (bannedWords, ctx.message.guild.id))
+
+    # Some formatting stuff
+    bannedWords = bannedWords.split()
+    listWords = "".join([wordLayout(x) for x in bannedWords])
+    await ctx.message.channel.send(f"Added '{newWord}' to banned word list.\n >>> Banned words: ```{listWords}```")
+
     conn.commit()
 
 
@@ -160,15 +176,48 @@ async def addwordignore(ctx, cursor, conn):
     ignoreWords = cursor.execute(
         "SELECT ignoreWords FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
     newWord = ctx.message.content.split()[3]
+
+    if newWord in ignoreWords:
+        await ctx.message.channel.send("Word already in ignore list.")
+        return
+
     ignoreWords += (" " + newWord)
-    await ctx.message.channel.send(f"Added {newWord} to ignored word list. {ignoreWords}.")
+
     cursor.execute("UPDATE settings SET ignoreWords=? WHERE guildID=?",
                    (ignoreWords, ctx.message.guild.id))
+    
+    # Some formatting stuff
+    ignoreWords = ignoreWords.split()
+    listWords = "".join([wordLayout(x) for x in ignoreWords])
+    await ctx.message.channel.send(f"Added '{newWord}' to ignored word list.\n >>> Ignoring words: ```{listWords}```")
+
     conn.commit()
 
 
 async def addchannelignore(ctx, cursor, conn):
-    return
+    # Pull ignored channel list and add to it, then put it back in the database
+    ignoreChannels = cursor.execute(
+        "SELECT ignoreChannels FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
+    newChannel = str(ctx.message.channel_mentions[0].id)
+
+    if newChannel in ignoreChannels:
+        await ctx.message.channel.send("Channel already in ignore list.")
+        return
+
+    if ignoreChannels == "":
+        ignoreChannels = newChannel
+    else:
+        ignoreChannels += (" " + newChannel)
+
+    cursor.execute("UPDATE settings SET ignoreChannels=? WHERE guildID=?",
+                   (ignoreChannels, ctx.message.guild.id))
+
+    # Some formatting stuff
+    ignoreChannels = ignoreChannels.split()
+    listChannels = "".join([channelLayout(x) for x in ignoreChannels])
+    await ctx.message.channel.send(f"Added <#{newChannel}> to ignored channel list.\n >>> Ignoring channels:\n {listChannels}")
+
+    conn.commit()
 
 
 # Functions to delete banned words, whitelisted words, and whitelisted channels
@@ -183,9 +232,15 @@ async def delwordban(ctx, cursor, conn):
     if removeWord in bannedWords:
         bannedWords.remove(removeWord)
         bannedWords = " ".join(bannedWords)
-        await ctx.message.channel.send(f"Removed {removeWord} from banned word list. {bannedWords}.")
+
         cursor.execute("UPDATE settings SET wordban=? WHERE guildID=?",
                        (bannedWords, ctx.message.guild.id))
+
+        # Some formatting stuff
+        bannedWords = bannedWords.split()
+        listWords = "".join([wordLayout(x) for x in bannedWords])
+        await ctx.message.channel.send(f"Removed '{removeWord}' from banned word list.\n >>> Banned words: ```{listWords}```")
+
         conn.commit()
         return
 
@@ -204,9 +259,15 @@ async def delwordignore(ctx, cursor, conn):
     if removeWord in ignoreWords:
         ignoreWords.remove(removeWord)
         ignoreWords = " ".join(ignoreWords)
-        await ctx.message.channel.send(f"Removed {removeWord} from ignored word list. {ignoreWords}.")
+        
         cursor.execute("UPDATE settings SET ignoreWords=? WHERE guildID=?",
                        (ignoreWords, ctx.message.guild.id))
+
+        # Some formatting stuff
+        ignoreWords = ignoreWords.split()
+        listWords = "".join([wordLayout(x) for x in ignoreWords])
+        await ctx.message.channel.send(f"Removed '{removeWord}' from ignored word list.\n >>> Ignoring words: ```{listWords}```")
+
         conn.commit()
         return
 
@@ -215,7 +276,25 @@ async def delwordignore(ctx, cursor, conn):
 
 
 async def delchannelignore(ctx, cursor, conn):
-    return
+    # Pull up ignored channel list and split it
+    ignoreChannels = cursor.execute(
+        "SELECT ignoreChannels FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
+    ignoreChannels = ignoreChannels.split()
+    removeChannel = str(ctx.message.channel_mentions[0].id)
+
+    # If the word is in the list, remove it from the list and put the list back into the database
+    if removeChannel in ignoreChannels:
+        ignoreChannels.remove(removeChannel)
+        ignoreChannels = " ".join(ignoreChannels)
+        cursor.execute("UPDATE settings SET ignoreChannels=? WHERE guildID=?",
+                       (ignoreChannels, ctx.message.guild.id))
+
+        # Some formatting stuff
+        ignoreChannels = ignoreChannels.split()
+        listChannels = "".join([channelLayout(x) for x in ignoreChannels])
+        await ctx.message.channel.send(f"Removed <#{removeChannel}> from ignored channel list.\n >>> Ignoring channels:\n {listChannels}")
+
+        conn.commit()
 
 
 def main():
@@ -242,7 +321,7 @@ def main():
         conn = sqlite3.connect('settings.sqlite')
         cursor = conn.cursor()
 
-        cursor.execute("CREATE TABLE settings (guildID INTEGER PRIMARY KEY, roleID INTEGER, length TEXT DEFAULT '-2 days', wordban TEXT DEFAULT 'idiot', timeout INTEGER DEFAULT '2', ignoreChannels TEXT, ignoreWords TEXT DEFAULT 'hey hello hi yo ^ yeah ya yea lol no nah nope')")
+        cursor.execute("CREATE TABLE settings (guildID INTEGER PRIMARY KEY, roleID INTEGER, length TEXT DEFAULT '-2 days', wordban TEXT DEFAULT 'idiot', timeout INTEGER DEFAULT '2', ignoreChannels TEXT DEFAULT '', ignoreWords TEXT DEFAULT 'hey hello hi yo ^ yeah ya yea lol no nah nope')")
 
     # On launch, print to console
     @bot.event
@@ -298,10 +377,10 @@ def main():
 
     # Command $repost delete X will call the appropriate function
     @bot.command()
-    async def delete(ctx):
+    async def remove(ctx):
         try:
             funcCall = ctx.message.content.split()[2]
-            if funcCall == 'banned':
+            if funcCall == 'ban':
                 await delwordban(ctx, cursor, conn)
             if funcCall == 'word':
                 await delwordignore(ctx, cursor, conn)
@@ -318,9 +397,6 @@ def main():
     # On message,
     @bot.event
     async def on_message(message):
-
-        # Check for commands
-        await bot.process_commands(message)
 
         # Ignore if this bot sent it
         if message.author == bot.user:
@@ -351,6 +427,9 @@ def main():
             guildCursor.execute(
                 "INSERT INTO members (memberID) VALUES (?)", (message.author.id,))
 
+        # Check for commands
+        await bot.process_commands(message)
+
         # Load options into variables
         ROLE_ID = settings[1]
         DELETE_TIME = settings[2]
@@ -360,7 +439,7 @@ def main():
         EXEMPT_WORDS = settings[6]
 
         # Only acknowledge whitelisted channel posts
-        if message.channel.id in IGNORE_CHANNELS.split():
+        if str(message.channel.id) in IGNORE_CHANNELS.split():
             return
 
         # Ignore exempt phrases
