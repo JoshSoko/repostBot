@@ -454,6 +454,8 @@ def main():
         if message.author == bot.user:
             return
 
+
+
         # Check if server has settings and a database
         serverExist = cursor.execute(
             "SELECT EXISTS(SELECT guildID FROM settings WHERE guildID = ?)", (message.guild.id,)).fetchone()
@@ -509,7 +511,6 @@ def main():
         messageList = emoji.demojize(message.content).split()
         res = all(each.startswith(":") and each.endswith(":") for each in messageList)
         if res == True:
-
             return
 
         # Whenever a message is sent, clear anything that's too old in the chat database.
@@ -521,8 +522,8 @@ def main():
                 if i in message.content:
                     await wordban(guildConn, guildCursor, message, TIMEOUT_TIME)
 
-            # Check for reposts
-            if message.content != "":
+            # Check for reposts, ignoring blank messages with embeds
+            if message.content != "" and bool(message.embeds[0]) == False:
                 await repost(guildConn, guildCursor, message, ROLE_ID)
 
     # Run bot

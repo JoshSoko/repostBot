@@ -33,6 +33,5 @@ A joke bot for Discord designed to punish people by assigning a role to users wh
 - Pull up a list of these commands.
   - Ex: $repost use
 
-
-## Known Bugs
-- Gifs trigger the bot
+## Notes
+- This bot exclusively checks text posts. It ignores any embeds altogether.
