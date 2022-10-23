@@ -468,8 +468,6 @@ def main():
         if message.author == bot.user:
             return
 
-        print(message.content)
-
         # Check if server has settings and a database
         serverExist = cursor.execute(
             "SELECT EXISTS(SELECT guildID FROM settings WHERE guildID = ?)", (message.guild.id,)).fetchone()
@@ -540,7 +538,7 @@ def main():
             if bool(message.embeds) == False:
                 await repost(guildConn, guildCursor, message, ROLE_ID)
             else:
-                if message.embeds[0].type == "article" or message.embeds[0].type == "rich" or message.content == "":
+                if message.content != "":
                     await repost(guildConn, guildCursor, message, ROLE_ID)
 
     # Run bot
