@@ -5,7 +5,6 @@ import emoji
 import discord
 import os
 import sqlite3
-import time
 from dotenv import load_dotenv
 from datetime import timedelta
 
@@ -24,10 +23,10 @@ def serverSetup(ctx, conn, cursor):
     # Connect to server's database if it exists. Otherwise, create one.
     try:
         guildConn = sqlite3.connect(
-            f'file:{ctx.id}.sqlite?mode=rw', uri=True)
+            f'file:{ctx.id}.sqlite?mode=rw', uri=True, timeout=10)
         guildCursor = guildConn.cursor()
     except sqlite3.OperationalError:
-        guildConn = sqlite3.connect(f'{ctx.id}.sqlite')
+        guildConn = sqlite3.connect(f'{ctx.id}.sqlite', timeout=10)
         guildCursor = guildConn.cursor()
 
         guildCursor.execute(
@@ -44,34 +43,12 @@ def serverSetup(ctx, conn, cursor):
 
     return guildConn, guildCursor
 
-
-# Function to clear old data from chat logs
-def clear(cursor, LENGTH):
-    cursor.execute(
-        "DELETE FROM chat WHERE (date < DATETIME('now', ?))", (LENGTH,))
-
-
 # Function to write message into database
 def writechat(conn, cursor, message):
     # Put time, message content, and user into database, then commit
     cursor.execute("INSERT INTO chat (date, messageDesc, memberID) VALUES (DATETIME('NOW', 'LOCALTIME'), ?, ?)",
                    (message.content, message.author.id,))
     conn.commit()
-
-
-# Function to write count of timeouts in database
-def writeban(conn, cursor, message):
-
-    # Otherwise, pull up their count, add 1 to it, and update it. Also commit it.
-    count = cursor.execute(
-        "SELECT count FROM members WHERE memberID = ?", (message.author.id,)).fetchone()[0]
-    count += 1
-    cursor.execute("UPDATE members SET count=? WHERE memberID=?",
-                   (count, message.author.id,))
-    conn.commit()
-
-    # We'll return the count for the announcement
-    return str(count)
 
 
 # Function to handle repost logic
@@ -123,55 +100,13 @@ async def repost(conn, cursor, message, ROLE_ID):
             except discord.errors.Forbidden:
                 await message.channel.send("Make sure my role is higher than the repost role! Otherwise, I can't assign or remove any roles!")
 
-
-# Function to time out person for saying banned word
-async def wordban(conn, cursor, message, TIMEOUT_TIME):
-    # How long to time out the offender
-    time = timedelta(minutes=TIMEOUT_TIME)
-
-    # The bot can't time out an admin, so we're going to raise an exception if that happens
-    try:
-        # Otherwise, we're going to time out the offender
-        await message.author.timeout(time, reason="Timed out for saying a banned word!")
-    except discord.errors.Forbidden:
-        print("Admin unable to be timed out")
-
-    # Call a function to write to the database
-    count = writeban(conn, cursor, message)
-
-
-    # And inform the channel of the offense
-    await message.channel.send(message.author.mention + " has been timed out for saying a banned word.\nThey have said a banned word " + count + " times.")
-
 def channelLayout(x):
     return " <#" + x + ">\n"
 
 def wordLayout(x):
     return " " + x + "\n"
 
-# Functions to add new banned words, whitelisted words, and whitelisted channels
-async def addwordban(ctx, cursor, conn):
-    # Pull banned word list and add to it, then put it back in the database
-    bannedWords = cursor.execute(
-        "SELECT wordban FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
-    newWord = ctx.message.content.split()[3]
-
-    if newWord in bannedWords:
-        await ctx.message.channel.send("Word already in ban list.")
-        return
-
-    bannedWords += (" " + newWord)
-
-    cursor.execute("UPDATE settings SET wordban=? WHERE guildID=?",
-                   (bannedWords, ctx.message.guild.id))
-
-    # Some formatting stuff
-    bannedWords = bannedWords.split()
-    listWords = "".join([wordLayout(x) for x in bannedWords])
-    await ctx.message.channel.send(f"Added '{newWord}' to banned word list.\n >>> Banned words: ```{listWords}```")
-
-    conn.commit()
-
+# Functions to add new whitelisted words and whitelisted channels
 
 async def addwordignore(ctx, cursor, conn):
     # Pull ignored word list and add to it, then put it back in the database
@@ -222,34 +157,7 @@ async def addchannelignore(ctx, cursor, conn):
     conn.commit()
 
 
-# Functions to delete banned words, whitelisted words, and whitelisted channels
-async def delwordban(ctx, cursor, conn):
-    # Pull up banned word list and split it
-    bannedWords = cursor.execute(
-        "SELECT wordban FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
-    bannedWords = bannedWords.split()
-    removeWord = ctx.message.content.split()[3]
-
-    # If the word is in the list, remove it from the list and put the list back into the database
-    if removeWord in bannedWords:
-        bannedWords.remove(removeWord)
-        bannedWords = " ".join(bannedWords)
-
-        cursor.execute("UPDATE settings SET wordban=? WHERE guildID=?",
-                       (bannedWords, ctx.message.guild.id))
-
-        # Some formatting stuff
-        bannedWords = bannedWords.split()
-        listWords = "".join([wordLayout(x) for x in bannedWords])
-        await ctx.message.channel.send(f"Removed '{removeWord}' from banned word list.\n >>> Banned words: ```{listWords}```")
-
-        conn.commit()
-        return
-
-    # If the word isn't in the list, tell the user
-    await ctx.message.channel.send("Word not found in banned word list.")
-
-
+# Functions to delete whitelisted words and whitelisted channels
 async def delwordignore(ctx, cursor, conn):
     # Pull up ignored word list and split it
     ignoreWords = cursor.execute(
@@ -274,7 +182,7 @@ async def delwordignore(ctx, cursor, conn):
         return
 
     # If the word isn't in the list, tell the user
-    await ctx.message.channel.send("Word not found in banned word list.")
+    await ctx.message.channel.send("Word not found in ignored word list.")
 
 
 async def delchannelignore(ctx, cursor, conn):
@@ -298,14 +206,6 @@ async def delchannelignore(ctx, cursor, conn):
 
         conn.commit()
 
-
-async def listBan(ctx, cursor, conn):
-    bannedWords = cursor.execute(
-        "SELECT wordban FROM settings WHERE guildID=?", (ctx.message.guild.id,)).fetchone()[0]
-
-    bannedWords = bannedWords.split()
-    listWords = "".join([wordLayout(x) for x in bannedWords])
-    await ctx.message.channel.send(f">>> Banned words: ```{listWords}```")
 
 async def listWord(ctx, cursor, conn):
     ignoreWords = cursor.execute(
@@ -341,13 +241,13 @@ def main():
 
     # Load up database; create database and tables if they doesn't exist.
     try:
-        conn = sqlite3.connect('file:settings.sqlite?mode=rw', uri=True)
+        conn = sqlite3.connect('file:settings.sqlite?mode=rw', uri=True, timeout=10)
         cursor = conn.cursor()
     except sqlite3.OperationalError:
-        conn = sqlite3.connect('settings.sqlite')
+        conn = sqlite3.connect('settings.sqlite', timeout=10)
         cursor = conn.cursor()
 
-        cursor.execute("CREATE TABLE settings (guildID INTEGER PRIMARY KEY, roleID INTEGER, length TEXT DEFAULT '-2 days', wordban TEXT DEFAULT 'idiot', timeout INTEGER DEFAULT '2', ignoreChannels TEXT DEFAULT '', ignoreWords TEXT DEFAULT 'hey hello hi yo ^ yeah ya yea lol no nah nope')")
+        cursor.execute("CREATE TABLE settings (guildID INTEGER PRIMARY KEY, roleID INTEGER, ignoreChannels TEXT DEFAULT '', ignoreWords TEXT DEFAULT 'hey hello hi yo ^ yeah ya yea lol no nah nope')")
 
     # On launch, print to console
     @bot.event
@@ -373,27 +273,11 @@ def main():
         except IndexError:
             return
 
-    # Command to set auto-timeout time
-    @bot.command()
-    async def timeout(ctx):
-        try:
-            timelimit = ctx.message.content.split()[2]
-            if timelimit.isnumeric():
-                TIMEOUT_TIME = int(timelimit)
-                cursor.execute("UPDATE settings SET timeout=? WHERE guildID=?",
-                               (TIMEOUT_TIME, ctx.message.guild.id,))
-                await ctx.message.channel.send(f"Timeout time for banned words set to {TIMEOUT_TIME} minutes.")
-                conn.commit()
-        except IndexError:
-            return
-
     # Command $repost add X will call the appropriate function
     @bot.command()
     async def add(ctx):
         try:
             funcCall = ctx.message.content.split()[2]
-            if funcCall == 'ban':
-                await addwordban(ctx, cursor, conn)
             if funcCall == 'word':
                 await addwordignore(ctx, cursor, conn)
             if funcCall == 'channel':
@@ -406,8 +290,6 @@ def main():
     async def remove(ctx):
         try:
             funcCall = ctx.message.content.split()[2]
-            if funcCall == 'ban':
-                await delwordban(ctx, cursor, conn)
             if funcCall == 'word':
                 await delwordignore(ctx, cursor, conn)
             if funcCall == 'channel':
@@ -419,8 +301,6 @@ def main():
     async def registry(ctx):
         try:
             funcCall = ctx.message.content.split()[2]
-            if funcCall == 'ban':
-                await listBan(ctx, cursor, conn)
             if funcCall == 'word':
                 await listWord(ctx, cursor, conn)
             if funcCall == 'channel':
@@ -429,31 +309,23 @@ def main():
             raise commands.CommandNotFound
 
     @bot.command()
-    async def length(ctx):
-        length = int(ctx.message.content.split()[2])
-        if length > 0 and length < 90:
-            await ctx.message.channel.send(f"Time for reposts set to {length} days.")
-            length = "-" + str(length) + " days"
-            cursor.execute("UPDATE settings SET length=? WHERE guildID=?",
-                               (length, ctx.message.guild.id,))
-            conn.commit()
-            return
-        await ctx.message.channel.send(f"Please use a number between 0 and 90.")
-
-
+    async def cleanup(ctx):
+        guildConn = sqlite3.connect(
+                f'file:{ctx.guild.id}.sqlite?mode=rw', uri=True, timeout=10)
+        guildCursor = guildConn.cursor()
+        guildCursor.execute(
+            "DELETE FROM chat WHERE (date < DATETIME('now', '-30 day'))")
+        await ctx.message.channel.send(f"Cleared past 30 days of logs.")
+        
     @bot.command()
     async def use(ctx):
         await ctx.channel.send("```\n\
             - $repost setrole @REPOSTROLE: Set a role to be applied to the most recent reposter.\n\
-            - $repost timeout #: Changes the timeout punishment time for saying a banned word. \n\
-            - $repost add ban BANNEDWORD: Add a word to the word ban list. \n\
             - $repost add word EXEMPTWORD: Add a word to the exemption list for reposts. \n\
             - $repost add channel #CHANNEL: Add a channel to the ignore list for reposts. \n\
-            - $repost remove ban BANNEDWORD: Remove a word from the word ban list. \n\
             - $repost remove word EXEMPTWORD: Remove a word from the exemption list for reposts. \n\
             - $repost remove channel #CHANNEL: Remove a channel from the ignore list for reposts. \n\
-            - $repost registry ban/word/channel: List the banned words/exempt words/ignored channels. \n\
-            - $repost length #: Set time for repost storage, between 0 and 90 days.```")
+            - $repost registry word/channel: List the exempt words/ignored channels. \n\```")
 
     @bot.event
     async def on_command_error(ctx, error):
@@ -477,7 +349,7 @@ def main():
             settings = (cursor.execute(
                 "SELECT * FROM settings WHERE guildID = ?", (message.guild.id,))).fetchall()[0]
             guildConn = sqlite3.connect(
-                f'file:{message.guild.id}.sqlite?mode=rw', uri=True)
+                f'file:{message.guild.id}.sqlite?mode=rw', uri=True, timeout=10)
             guildCursor = guildConn.cursor()
         else:
             guildConn, guildCursor = serverSetup(message.guild, conn, cursor)
@@ -492,18 +364,17 @@ def main():
         if memberExist[0] == 0:
             guildCursor.execute(
                 "INSERT INTO members (memberID) VALUES (?)", (message.author.id,))
+            
+        # Load options into variables
+        ROLE_ID = settings[1]
+        IGNORE_CHANNELS = settings[2]
+        EXEMPT_WORDS = settings[3]
 
         # Check for commands
         if message.author.guild_permissions.administrator == True:
             await bot.process_commands(message)
 
-        # Load options into variables
-        ROLE_ID = settings[1]
-        DELETE_TIME = settings[2]
-        BANNED_WORDS = settings[3]
-        TIMEOUT_TIME = settings[4]
-        IGNORE_CHANNELS = str(settings[5])
-        EXEMPT_WORDS = settings[6]
+        
 
         # Only acknowledge whitelisted channel posts
         if str(message.channel.id) in IGNORE_CHANNELS.split():
@@ -525,22 +396,15 @@ def main():
         if res == True:
             return
 
-        # Whenever a message is sent, clear anything that's too old in the chat database.
-        clear(guildCursor, DELETE_TIME)
-
         if not message.content.startswith(BOT_PREFIX):
-            # Check for banned word
-            for i in BANNED_WORDS.split():
-                if i in message.content:
-                    await wordban(guildConn, guildCursor, message, TIMEOUT_TIME)
-
-            # Check for reposts, ignoring blank messages with embeds
+        # Check for reposts, ignoring blank messages with embeds
             if bool(message.embeds) == False:
                 await repost(guildConn, guildCursor, message, ROLE_ID)
             else:
                 if message.content != "":
                     await repost(guildConn, guildCursor, message, ROLE_ID)
 
+        guildConn.close()
     # Run bot
     bot.run(TOKEN)
 
